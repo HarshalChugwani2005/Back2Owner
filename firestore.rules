@@ -1,0 +1,95 @@
+// Firestore Security Rules for Back2Owner
+// Deploy these rules via Firebase Console or Firebase CLI
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user is the document owner
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // Helper function to check if user is the item reporter
+    function isItemReporter(reporterID) {
+      return request.auth.uid == reporterID;
+    }
+
+    // Users collection
+    match /users/{uid} {
+      // Users can read their own data
+      allow read: if isOwner(uid);
+      
+      // Users can update their own data
+      allow update: if isOwner(uid);
+      
+      // Users can create their own document
+      allow create: if isSignedIn() && isOwner(uid);
+      
+      // Users cannot delete their own data (soft delete only)
+      allow delete: if false;
+    }
+
+    // Items collection
+    match /items/{itemId} {
+      // Anyone can read published items
+      allow read: if resource.data.status != 'DRAFT';
+      
+      // Users can read their own draft items
+      allow read: if isSignedIn() && isItemReporter(resource.data.reporterID);
+      
+      // Only report owner can update their item
+      allow update: if isSignedIn() && isItemReporter(resource.data.reporterID);
+      
+      // Signed-in users can create items
+      allow create: if isSignedIn();
+      
+      // Only reporter can delete
+      allow delete: if isSignedIn() && isItemReporter(resource.data.reporterID);
+    }
+
+    // Claims collection
+    match /claims/{claimId} {
+      // Claimant can read their own claims
+      allow read: if isSignedIn() && isOwner(resource.data.claimerID);
+      
+      // Item reporter can read claims for their items
+      allow read: if isSignedIn() && 
+                   get(/databases/$(database)/documents/items/$(resource.data.itemID)).data.reporterID == request.auth.uid;
+      
+      // Signed-in users can create claims
+      allow create: if isSignedIn();
+      
+      // Only claimant or item reporter can update
+      allow update: if isSignedIn() && 
+                    (isOwner(resource.data.claimerID) || 
+                     get(/databases/$(database)/documents/items/$(resource.data.itemID)).data.reporterID == request.auth.uid);
+      
+      // Only claimant or item reporter can delete
+      allow delete: if isSignedIn() && 
+                    (isOwner(resource.data.claimerID) || 
+                     get(/databases/$(database)/documents/items/$(resource.data.itemID)).data.reporterID == request.auth.uid);
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isSignedIn() && isOwner(resource.data.userID);
+      
+      // Only Cloud Functions can write notifications
+      allow create: if false;
+      
+      // Users can update their own notifications
+      allow update: if isSignedIn() && isOwner(resource.data.userID);
+      
+      // Users can delete their own notifications
+      allow delete: if isSignedIn() && isOwner(resource.data.userID);
+    }
+
+    // Storage buckets rules are handled separately in Storage Rules
+  }
+}

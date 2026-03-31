@@ -1,0 +1,38 @@
+// Cloud Storage Security Rules for Back2Owner
+// Deploy via Firebase Console
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Items photos
+    match /items/{itemId}/{allPaths=**} {
+      // Anyone can read item photos (to display in feed)
+      allow read: if true;
+      
+      // Only authenticated users can upload
+      allow write: if isSignedIn() && 
+                    request.resource.size < 10 * 1024 * 1024; // Max 10MB per file
+    }
+
+    // User profile photos
+    match /users/{userId}/{allPaths=**} {
+      // Anyone can read user profile photos
+      allow read: if true;
+      
+      // Only the user can upload their own profile photo
+      allow write: if isSignedIn() && 
+                    request.auth.uid == userId &&
+                    request.resource.size < 5 * 1024 * 1024; // Max 5MB
+    }
+
+    // Deny all other access by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

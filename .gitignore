@@ -1,0 +1,21 @@
+﻿# Android/Gradle generated
+.gradle/
+**/build/
+
+# Local machine specific
+local.properties
+
+# IDE files
+.idea/
+*.iml
+
+# Android Studio captures and logs
+captures/
+
+# Generated service config (keep private)
+app/google-services.json
+
+# Crash dumps
+java_pid*.hprof
+hs_err_pid*.log
+replay_pid*.log
