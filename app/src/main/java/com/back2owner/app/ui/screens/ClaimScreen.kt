@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -58,7 +58,7 @@ fun ClaimScreen(
                 title = { Text("Verify Ownership") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -138,7 +138,7 @@ fun ClaimScreen(
                         placeholder = { Text("Type your answer here...") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.medium,
-                        leadingIcon = { Icon(Icons.Default.HelpOutline, contentDescription = null) }
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null) }
                     )
 
                     // Optional Message
@@ -151,7 +151,7 @@ fun ClaimScreen(
                             .fillMaxWidth()
                             .height(120.dp),
                         shape = MaterialTheme.shapes.medium,
-                        leadingIcon = { Icon(Icons.Default.Message, contentDescription = null) }
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) }
                     )
 
                     // Error display

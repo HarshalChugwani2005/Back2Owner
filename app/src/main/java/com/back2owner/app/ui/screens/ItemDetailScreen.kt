@@ -7,7 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
@@ -51,7 +51,7 @@ fun ItemDetailScreen(
                 title = { Text("Item Details") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -150,7 +150,7 @@ fun ItemDetailScreen(
                             }
                         }
 
-                        Divider()
+                        HorizontalDivider()
 
                         // Description
                         Text(
@@ -185,7 +185,7 @@ fun ItemDetailScreen(
                                 shape = MaterialTheme.shapes.large
                             ) {
                                 Text(
-                                    text = if (isFound) "Submit Claim Claim" else "I Found This Item",
+                                    text = if (isFound) "Submit Claim" else "I Found This Item",
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             }

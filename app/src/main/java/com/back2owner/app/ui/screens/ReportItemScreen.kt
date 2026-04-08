@@ -1,22 +1,36 @@
 package com.back2owner.app.ui.screens
 
+import android.Manifest
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.HistoryEdu
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import com.back2owner.app.data.ImageUtils
 import com.back2owner.app.data.model.ItemCategory
 import com.back2owner.app.ui.viewmodel.ReportItemViewModel
 
@@ -26,22 +40,65 @@ fun ReportItemScreen(
     viewModel: ReportItemViewModel = hiltViewModel(),
     onSuccess: () -> Unit = {},
 ) {
+    val context = LocalContext.current
+
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<ItemCategory>(ItemCategory.Electronics) }
     var itemType by remember { mutableStateOf("lost") }
     var securityQuestion by remember { mutableStateOf("") }
-    var securityAnswerHash by remember { mutableStateOf("") } // In a real app, this might be hashed before sending
+    var securityAnswer by remember { mutableStateOf("") }
 
-    // For the demo, we'll use a dummy photo byte array
-    val dummyPhotoBytes = ByteArray(0)
+    // Photo state
+    var selectedPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var photoBytes by remember { mutableStateOf(ByteArray(0)) }
+    var blurredPhotoBytes by remember { mutableStateOf(ByteArray(0)) }
+    var showPhotoSheet by remember { mutableStateOf(false) }
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
 
     val isLoading by viewModel.isLoading.collectAsState()
     val success by viewModel.success.collectAsState()
     val error by viewModel.error.collectAsState()
 
     val scrollState = rememberScrollState()
+
+    // --- Activity Result Launchers ---
+
+    // Photo Picker (Gallery)
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedPhotoUri = it
+            val bytes = ImageUtils.uriToByteArray(context, it)
+            photoBytes = bytes
+            blurredPhotoBytes = ImageUtils.generateBlurredBytes(bytes)
+        }
+    }
+
+    // Camera capture
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { captured ->
+        if (captured && tempCameraUri != null) {
+            selectedPhotoUri = tempCameraUri
+            val bytes = ImageUtils.uriToByteArray(context, tempCameraUri!!)
+            photoBytes = bytes
+            blurredPhotoBytes = ImageUtils.generateBlurredBytes(bytes)
+        }
+    }
+
+    // Camera permission
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val uri = ImageUtils.createTempImageUri(context)
+            tempCameraUri = uri
+            cameraLauncher.launch(uri)
+        }
+    }
 
     LaunchedEffect(success) {
         if (success) {
@@ -161,33 +218,143 @@ fun ReportItemScreen(
                     }
                 }
 
-                // Photo Selection card
-                OutlinedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large,
-                    onClick = { /* Photo picker launch logic */ }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(20.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.PhotoCamera,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Column {
-                            Text(
-                                "Add Photo",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                // ==========================================
+                // Photo Section — Camera & Gallery Picker
+                // ==========================================
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Item Photo",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    if (selectedPhotoUri != null) {
+                        // Photo preview with remove button
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large,
+                            elevation = CardDefaults.cardElevation(4.dp)
+                        ) {
+                            Box {
+                                AsyncImage(
+                                    model = selectedPhotoUri,
+                                    contentDescription = "Selected photo",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(220.dp)
+                                        .clip(MaterialTheme.shapes.large),
+                                    contentScale = ContentScale.Crop
+                                )
+
+                                // Gradient overlay at the top for the remove button
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp)
+                                        .background(
+                                            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f),
+                                                    MaterialTheme.colorScheme.scrim.copy(alpha = 0f),
+                                                )
+                                            )
+                                        )
+                                        .align(Alignment.TopCenter)
+                                )
+
+                                // Remove button
+                                FilledTonalIconButton(
+                                    onClick = {
+                                        selectedPhotoUri = null
+                                        photoBytes = ByteArray(0)
+                                        blurredPhotoBytes = ByteArray(0)
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .size(36.dp),
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Remove photo",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                // "Photo attached" chip
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(12.dp),
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                                    tonalElevation = 2.dp
+                                ) {
+                                    Text(
+                                        text = "✓ Photo attached",
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+
+                        // Replace photo button
+                        OutlinedButton(
+                            onClick = { showPhotoSheet = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Icon(
+                                Icons.Default.PhotoCamera,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Text(
-                                "Essential for verifying the item.",
-                                style = MaterialTheme.typography.bodySmall
+                            Spacer(Modifier.width(8.dp))
+                            Text("Replace Photo")
+                        }
+                    } else {
+                        // Empty state — pick a photo
+                        OutlinedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large,
+                            onClick = { showPhotoSheet = true },
+                            border = BorderStroke(
+                                width = 2.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
                             )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.PhotoCamera,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Text(
+                                    "Tap to add a photo",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Take a photo or choose from gallery.\nPhotos are blurred in the feed for privacy.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
@@ -223,8 +390,8 @@ fun ReportItemScreen(
                                     maxLines = 2
                                 )
                                 OutlinedTextField(
-                                    value = securityAnswerHash,
-                                    onValueChange = { securityAnswerHash = it },
+                                    value = securityAnswer,
+                                    onValueChange = { securityAnswer = it },
                                     label = { Text("Security Answer") },
                                     placeholder = { Text("The correct answer to verify ownership.") },
                                     modifier = Modifier.fillMaxWidth(),
@@ -254,7 +421,10 @@ fun ReportItemScreen(
                             category = selectedCategory,
                             location = location,
                             itemType = itemType,
-                            photoBytes = dummyPhotoBytes
+                            photoBytes = photoBytes,
+                            securityQuestion = securityQuestion,
+                            securityAnswer = securityAnswer,
+                            blurredPhotoBytes = blurredPhotoBytes,
                         )
                     },
                     modifier = Modifier
@@ -276,8 +446,77 @@ fun ReportItemScreen(
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+
+    // ==========================================
+    // Photo Options Bottom Sheet
+    // ==========================================
+    if (showPhotoSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showPhotoSheet = false },
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
+            Column(
+                modifier = Modifier.padding(bottom = 32.dp)
+            ) {
+                Text(
+                    text = "Add Photo",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Take Photo option
+                ListItem(
+                    headlineContent = {
+                        Text("Take Photo", fontWeight = FontWeight.Medium)
+                    },
+                    supportingContent = {
+                        Text("Use your camera to capture the item")
+                    },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.PhotoCamera,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showPhotoSheet = false
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                )
+
+                // Choose from Gallery option
+                ListItem(
+                    headlineContent = {
+                        Text("Choose from Gallery", fontWeight = FontWeight.Medium)
+                    },
+                    supportingContent = {
+                        Text("Select an existing photo from your device")
+                    },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.PhotoLibrary,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showPhotoSheet = false
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                )
             }
         }
     }
@@ -291,7 +530,7 @@ fun SegmentedButton(selected: Boolean, onClick: () -> Unit, label: String, modif
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 2.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
