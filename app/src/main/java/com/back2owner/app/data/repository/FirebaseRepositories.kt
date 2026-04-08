@@ -9,7 +9,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
@@ -103,6 +105,19 @@ class FirebaseItemRepository @Inject constructor(
         ref.putBytes(blurredPhotoBytes).await()
         ref.downloadUrl.await().toString()
     }
+
+    override suspend fun updateItemPhotoUrls(
+        itemId: String,
+        photoURL: String,
+        blurredPhotoURL: String,
+    ): Result<Unit> = runCatching {
+        val updates = mutableMapOf<String, Any>()
+        if (photoURL.isNotEmpty()) updates["photoURL"] = photoURL
+        if (blurredPhotoURL.isNotEmpty()) updates["blurredPhotoURL"] = blurredPhotoURL
+        if (updates.isNotEmpty()) {
+            firestore.collection("items").document(itemId).update(updates).await()
+        }
+    }
 }
 
 /**
@@ -128,7 +143,7 @@ class FirebaseUserRepository @Inject constructor(
 
     override suspend fun updateFCMToken(uid: String, token: String): Result<Unit> = runCatching {
         firestore.collection("users").document(uid)
-            .update("fcmTokens", arrayOf(token)).await()
+            .update("fcmTokens", com.google.firebase.firestore.FieldValue.arrayUnion(token)).await()
     }
 
     override suspend fun getUserRating(uid: String): Result<Double> = runCatching {
@@ -235,15 +250,20 @@ class FirebaseNotificationRepository @Inject constructor(
         firestore.collection("notifications").document(notificationId).delete().await()
     }
 
-    override fun observeNotifications(userId: String): Flow<List<Notification>> = flow {
-        firestore.collection("notifications")
+    override fun observeNotifications(userId: String): Flow<List<Notification>> = callbackFlow {
+        val listener = firestore.collection("notifications")
             .whereEqualTo("userID", userId)
             .orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
                 snapshot?.toObjects(Notification::class.java)?.let {
-                    // Note: In production, use callbackFlow for proper Firestore listener management
+                    trySend(it)
                 }
             }
+        awaitClose { listener.remove() }
     }
 }
 
@@ -275,7 +295,11 @@ class FirebaseAuthRepository @Inject constructor(
         auth.sendPasswordResetEmail(email).await()
     }
 
-    override fun getCurrentUserFlow(): Flow<String?> = flow {
-        emit(auth.currentUser?.uid)
+    override fun getCurrentUserFlow(): Flow<String?> = callbackFlow {
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            trySend(firebaseAuth.currentUser?.uid)
+        }
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
     }
 }

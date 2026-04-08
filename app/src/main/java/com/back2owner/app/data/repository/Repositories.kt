@@ -20,6 +20,7 @@ interface ItemRepository {
     fun searchItems(query: String, type: String = "lost"): Flow<List<Item>>
     suspend fun uploadItemPhoto(itemId: String, photoBytes: ByteArray): Result<String>
     suspend fun uploadBlurredPhoto(itemId: String, blurredPhotoBytes: ByteArray): Result<String>
+    suspend fun updateItemPhotoUrls(itemId: String, photoURL: String, blurredPhotoURL: String): Result<Unit>
 }
 
 /**
