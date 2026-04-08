@@ -26,9 +26,15 @@ class ReportItemUseCase @Inject constructor(
         itemType: String, // "lost" or "found"
         photoBytes: ByteArray,
         reporterID: String,
+        securityQuestion: String = "",
+        securityAnswer: String = "",
+        blurredPhotoBytes: ByteArray = ByteArray(0),
     ): Result<String> = runCatching {
         val currentUser = userRepository.getUserById(reporterID).getOrThrow()
-        
+
+        // Hash the security answer if provided
+        val answerHash = if (securityAnswer.isNotEmpty()) hashSecurityAnswer(securityAnswer) else ""
+
         val item = Item(
             title = title,
             description = description,
@@ -38,15 +44,38 @@ class ReportItemUseCase @Inject constructor(
             reporterID = reporterID,
             reporterName = currentUser.displayName,
             reporterEmail = currentUser.email,
+            securityQuestion = securityQuestion,
+            securityAnswerHash = answerHash,
         )
 
         val itemId = itemRepository.reportItem(item).getOrThrow()
-        itemRepository.uploadItemPhoto(itemId, photoBytes).getOrThrow()
-        
+
+        // Upload photos and get download URLs
+        var photoURL = ""
+        var blurredPhotoURL = ""
+
+        if (photoBytes.isNotEmpty()) {
+            photoURL = itemRepository.uploadItemPhoto(itemId, photoBytes).getOrThrow()
+        }
+        if (blurredPhotoBytes.isNotEmpty()) {
+            blurredPhotoURL = itemRepository.uploadBlurredPhoto(itemId, blurredPhotoBytes).getOrThrow()
+        }
+
+        // Write the download URLs back to the item document
+        if (photoURL.isNotEmpty() || blurredPhotoURL.isNotEmpty()) {
+            itemRepository.updateItemPhotoUrls(itemId, photoURL, blurredPhotoURL).getOrNull()
+        }
+
         // Increment items reported counter
         userRepository.incrementItemsReported(reporterID).getOrNull()
-        
+
         itemId
+    }
+
+    private fun hashSecurityAnswer(answer: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val hashBytes = md.digest(answer.lowercase().trim().toByteArray())
+        return android.util.Base64.encodeToString(hashBytes, android.util.Base64.DEFAULT)
     }
 }
 
@@ -196,19 +225,15 @@ class UpdateUserProfileUseCase @Inject constructor(
 /**
  * Use case for verifying security answer and approving claim
  */
-class VerifyAndApprovClaimUseCase @Inject constructor(
+class VerifyAndApproveClaimUseCase @Inject constructor(
     private val claimRepository: ClaimRepository,
     private val itemRepository: ItemRepository,
 ) {
-    suspend operator fun invoke(claimId: String): Result<Unit> = runCatching {
+    suspend operator fun invoke(claimId: String, itemId: String): Result<Unit> = runCatching {
         claimRepository.updateClaimStatus(claimId, "approved").getOrThrow()
-        
+
         // Update item status to claimed
-        val claims = claimRepository.getClaimsByItemId("").getOrThrow()
-        val claim = claims.find { it.id == claimId }
-        claim?.let {
-            itemRepository.updateItemStatus(it.itemID, "CLAIMED").getOrThrow()
-        }
+        itemRepository.updateItemStatus(itemId, "CLAIMED").getOrThrow()
     }
 }
 
