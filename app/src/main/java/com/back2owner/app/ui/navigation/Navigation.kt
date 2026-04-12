@@ -9,12 +9,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.back2owner.app.ui.screens.*
 
+import com.back2owner.app.ui.viewmodel.AuthViewModel
+
 /**
  * Main navigation graph for the Back2Owner application.
  * Defines all screen routes and provides common navigation callbacks.
  */
 @Composable
-fun Back2OwnerNavigation(navController: NavHostController) {
+fun Back2OwnerNavigation(navController: NavHostController, authViewModel: AuthViewModel) {
     NavHost(
         navController = navController,
         startDestination = "feed" // Default destination for authenticated users
@@ -22,11 +24,13 @@ fun Back2OwnerNavigation(navController: NavHostController) {
         // Authentication Screens
         composable("login") {
             LoginScreen(
+                viewModel = authViewModel,
                 onNavigateToSignUp = { navController.navigate("signup") }
             )
         }
         composable("signup") {
             SignUpScreen(
+                viewModel = authViewModel,
                 onNavigateToLogin = { navController.popBackStack() }
             )
         }

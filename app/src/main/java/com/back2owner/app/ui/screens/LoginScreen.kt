@@ -33,8 +33,8 @@ fun LoginScreen(
     viewModel: AuthViewModel = hiltViewModel(),
     onNavigateToSignUp: () -> Unit,
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("admin") }
+    var password by remember { mutableStateOf("admin") }
     var passwordVisible by remember { mutableStateOf(false) }
 
     val isLoading by viewModel.isLoading.collectAsState()
@@ -162,6 +162,17 @@ fun LoginScreen(
                         } else {
                             Text("Sign In", style = MaterialTheme.typography.labelLarge)
                         }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            text = "Demo sign in: admin / admin",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
                     }
 
                     Row(

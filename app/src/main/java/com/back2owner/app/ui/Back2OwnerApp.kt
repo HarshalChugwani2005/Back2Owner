@@ -70,7 +70,7 @@ fun Back2OwnerApp(
                     CircularProgressIndicator()
                 }
             } else {
-                Back2OwnerNavigation(navController)
+                Back2OwnerNavigation(navController, authViewModel)
             }
         }
     }

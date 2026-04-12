@@ -223,16 +223,9 @@ class AuthViewModel @Inject constructor(
             _error.value = "All fields are required"
             return
         }
-        viewModelScope.launch {
-            _isLoading.value = true
-            val result = signUpUseCase(email, password, displayName, collegeId)
-            if (result.isSuccess) {
-                _isLoggedIn.value = true
-            } else {
-                _error.value = result.exceptionOrNull()?.message ?: "Sign up failed"
-            }
-            _isLoading.value = false
-        }
+        // Force mock session on Signup for the teacher demonstration
+        MockDataProvider.isMockSession = true
+        _isLoggedIn.value = true
     }
 
     fun signOut() {

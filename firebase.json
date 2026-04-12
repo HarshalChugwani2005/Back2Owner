@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "back2owner-campus"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": [
+    {
+      "bucket": "back2owner-campus.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ]
+}
