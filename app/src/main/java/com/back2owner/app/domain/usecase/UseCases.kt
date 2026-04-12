@@ -258,3 +258,14 @@ class GetItemByIdUseCase @Inject constructor(
         return itemRepository.getItemById(itemId)
     }
 }
+
+/**
+ * Use case for fetching items reported by a specific user
+ */
+class GetItemsByReporterUseCase @Inject constructor(
+    private val itemRepository: ItemRepository,
+) {
+    suspend operator fun invoke(reporterID: String): Result<List<Item>> {
+        return itemRepository.getItemsByReporter(reporterID)
+    }
+}

@@ -2,17 +2,18 @@ package com.back2owner.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.back2owner.app.data.mock.MockDataProvider
 import com.back2owner.app.data.model.Item
 import com.back2owner.app.data.model.User
 import com.back2owner.app.data.model.ClaimRequest
 import com.back2owner.app.domain.usecase.CreateClaimUseCase
 import com.back2owner.app.domain.usecase.GetFoundItemsUseCase
+import com.back2owner.app.domain.usecase.GetItemsByReporterUseCase
 import com.back2owner.app.domain.usecase.GetLostItemsUseCase
 import com.back2owner.app.domain.usecase.GetUserUseCase
 import com.back2owner.app.domain.usecase.ReportItemUseCase
 import com.back2owner.app.domain.usecase.SignInUseCase
 import com.back2owner.app.domain.usecase.SignUpUseCase
+import com.back2owner.app.domain.usecase.UpdateUserProfileUseCase
 import com.back2owner.app.domain.usecase.GetItemByIdUseCase
 import com.back2owner.app.data.model.ItemCategory
 import com.back2owner.app.data.repository.AuthRepository
@@ -52,24 +53,18 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                if (MockDataProvider.isMockSession) {
-                    // Return mock data directly
-                    _lostItems.value = MockDataProvider.getAllLostItems()
-                    _foundItems.value = MockDataProvider.getAllFoundItems()
+                val lostResult = getLostItemsUseCase()
+                if (lostResult.isSuccess) {
+                    _lostItems.value = lostResult.getOrNull() ?: emptyList()
                 } else {
-                    val lostResult = getLostItemsUseCase()
-                    if (lostResult.isSuccess) {
-                        _lostItems.value = lostResult.getOrNull() ?: emptyList()
-                    } else {
-                        _error.value = lostResult.exceptionOrNull()?.message
-                    }
+                    _error.value = lostResult.exceptionOrNull()?.message
+                }
 
-                    val foundResult = getFoundItemsUseCase()
-                    if (foundResult.isSuccess) {
-                        _foundItems.value = foundResult.getOrNull() ?: emptyList()
-                    } else {
-                        _error.value = foundResult.exceptionOrNull()?.message
-                    }
+                val foundResult = getFoundItemsUseCase()
+                if (foundResult.isSuccess) {
+                    _foundItems.value = foundResult.getOrNull() ?: emptyList()
+                } else {
+                    _error.value = foundResult.exceptionOrNull()?.message
                 }
             } catch (e: Exception) {
                 _error.value = e.message
@@ -118,36 +113,19 @@ class ReportItemViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                if (MockDataProvider.isMockSession) {
-                    // Create a mock item in-memory
-                    val mockItem = Item(
-                        title = title,
-                        description = description,
-                        category = category.name,
-                        location = location,
-                        itemType = itemType,
-                        reporterID = MockDataProvider.MOCK_USER_ID,
-                        reporterName = MockDataProvider.mockUser.displayName,
-                        reporterEmail = MockDataProvider.MOCK_EMAIL,
-                        securityQuestion = securityQuestion,
-                    )
-                    MockDataProvider.addMockItem(mockItem)
+                val reporterId = authRepository.getCurrentUserId()
+                    ?: throw Exception("You must be signed in to report an item")
+
+                val result = reportItemUseCase(
+                    title, description, category, location, itemType, photoBytes, reporterId,
+                    securityQuestion = securityQuestion,
+                    securityAnswer = securityAnswer,
+                    blurredPhotoBytes = blurredPhotoBytes,
+                )
+                if (result.isSuccess) {
                     _success.value = true
                 } else {
-                    val reporterId = authRepository.getCurrentUserId()
-                        ?: throw Exception("You must be signed in to report an item")
-
-                    val result = reportItemUseCase(
-                        title, description, category, location, itemType, photoBytes, reporterId,
-                        securityQuestion = securityQuestion,
-                        securityAnswer = securityAnswer,
-                        blurredPhotoBytes = blurredPhotoBytes,
-                    )
-                    if (result.isSuccess) {
-                        _success.value = true
-                    } else {
-                        _error.value = result.exceptionOrNull()?.message
-                    }
+                    _error.value = result.exceptionOrNull()?.message
                 }
             } catch (e: Exception) {
                 _error.value = e.message
@@ -186,24 +164,13 @@ class AuthViewModel @Inject constructor(
 
     private fun checkAuthState() {
         viewModelScope.launch {
-            // If we were in a mock session that hasn't been cleared, stay logged in
-            if (MockDataProvider.isMockSession) {
-                _isLoggedIn.value = true
-            } else {
-                _isLoggedIn.value = authRepository.getCurrentUserId() != null
-            }
+            _isLoggedIn.value = authRepository.getCurrentUserId() != null
         }
     }
 
     fun signIn(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) {
             _error.value = "Email and password cannot be empty"
-            return
-        }
-        // Hardcoded credentials for demo/testing
-        if (MockDataProvider.isMockCredentials(email, password)) {
-            MockDataProvider.isMockSession = true
-            _isLoggedIn.value = true
             return
         }
         viewModelScope.launch {
@@ -223,18 +190,21 @@ class AuthViewModel @Inject constructor(
             _error.value = "All fields are required"
             return
         }
-        // Force mock session on Signup for the teacher demonstration
-        MockDataProvider.isMockSession = true
-        _isLoggedIn.value = true
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = signUpUseCase(email, password, displayName, collegeId)
+            if (result.isSuccess) {
+                _isLoggedIn.value = true
+            } else {
+                _error.value = result.exceptionOrNull()?.message ?: "Sign up failed"
+            }
+            _isLoading.value = false
+        }
     }
 
     fun signOut() {
         viewModelScope.launch {
-            if (MockDataProvider.isMockSession) {
-                MockDataProvider.reset()
-            } else {
-                authRepository.signOut()
-            }
+            authRepository.signOut()
             _isLoggedIn.value = false
         }
     }
@@ -248,6 +218,8 @@ class AuthViewModel @Inject constructor(
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val getUserUseCase: GetUserUseCase,
+    private val getItemsByReporterUseCase: GetItemsByReporterUseCase,
+    private val updateUserProfileUseCase: UpdateUserProfileUseCase,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
 
@@ -267,6 +239,12 @@ class ProfileViewModel @Inject constructor(
     private val _myItems = MutableStateFlow<List<Item>>(emptyList())
     val myItems: StateFlow<List<Item>> = _myItems.asStateFlow()
 
+    private val _isEditMode = MutableStateFlow(false)
+    val isEditMode: StateFlow<Boolean> = _isEditMode.asStateFlow()
+
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
     init {
         loadProfile()
     }
@@ -275,16 +253,18 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                if (MockDataProvider.isMockSession) {
-                    // Use mock user data directly
-                    _user.value = MockDataProvider.mockUser
-                    _myItems.value = MockDataProvider.getItemsByReporter(MockDataProvider.MOCK_USER_ID)
-                } else {
-                    val uid = authRepository.getCurrentUserId()
-                    if (uid != null) {
-                        val result = getUserUseCase(uid)
-                        _user.value = result.getOrNull()
-                        result.exceptionOrNull()?.let { _error.value = it.message }
+                val uid = authRepository.getCurrentUserId()
+                if (uid != null) {
+                    val result = getUserUseCase(uid)
+                    _user.value = result.getOrNull()
+                    result.exceptionOrNull()?.let { _error.value = it.message }
+
+                    // Load user's reported items
+                    val itemsResult = getItemsByReporterUseCase(uid)
+                    if (itemsResult.isSuccess) {
+                        _myItems.value = itemsResult.getOrNull() ?: emptyList()
+                    } else {
+                        itemsResult.exceptionOrNull()?.let { _error.value = it.message }
                     }
                 }
             } catch (e: Exception) {
@@ -297,12 +277,49 @@ class ProfileViewModel @Inject constructor(
 
     fun signOut() {
         viewModelScope.launch {
-            if (MockDataProvider.isMockSession) {
-                MockDataProvider.reset()
-            } else {
-                authRepository.signOut()
-            }
+            authRepository.signOut()
             _signedOut.value = true
+        }
+    }
+
+    fun toggleEditMode() {
+        _isEditMode.value = !_isEditMode.value
+    }
+
+    fun updateProfile(
+        displayName: String,
+        biography: String,
+    ) {
+        if (displayName.isBlank()) {
+            _error.value = "Display name cannot be empty"
+            return
+        }
+
+        viewModelScope.launch {
+            _isSaving.value = true
+            try {
+                val uid = authRepository.getCurrentUserId()
+                if (uid != null && _user.value != null) {
+                    val updatedUser = _user.value!!.copy(
+                        displayName = displayName,
+                        biography = biography,
+                    )
+                    val result = updateUserProfileUseCase(updatedUser)
+                    if (result.isSuccess) {
+                        _user.value = updatedUser
+                        _isEditMode.value = false
+                        _error.value = null
+                    } else {
+                        _error.value = result.exceptionOrNull()?.message ?: "Failed to update profile"
+                    }
+                } else {
+                    _error.value = "User not found"
+                }
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                _isSaving.value = false
+            }
         }
     }
 
@@ -329,20 +346,11 @@ class ItemDetailViewModel @Inject constructor(
     fun loadItem(itemId: String) {
         viewModelScope.launch {
             _isLoading.value = true
-            if (MockDataProvider.isMockSession) {
-                val mockItem = MockDataProvider.getItemById(itemId)
-                if (mockItem != null) {
-                    _item.value = mockItem
-                } else {
-                    _error.value = "Item not found"
-                }
+            val result = getItemByIdUseCase(itemId)
+            if (result.isSuccess) {
+                _item.value = result.getOrNull()
             } else {
-                val result = getItemByIdUseCase(itemId)
-                if (result.isSuccess) {
-                    _item.value = result.getOrNull()
-                } else {
-                    _error.value = result.exceptionOrNull()?.message
-                }
+                _error.value = result.exceptionOrNull()?.message
             }
             _isLoading.value = false
         }
@@ -376,23 +384,9 @@ class ClaimDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                if (MockDataProvider.isMockSession) {
-                    // Create a mock claim in-memory
-                    val user = MockDataProvider.mockUser
-                    val claim = ClaimRequest(
-                        itemID = itemId,
-                        claimerID = user.uid,
-                        claimerName = user.displayName,
-                        claimerEmail = user.email,
-                        securityAnswerHash = securityAnswer, // not hashed in mock mode
-                        message = message,
-                    )
-                    MockDataProvider.addClaim(claim)
-                    _success.value = true
-                } else {
-                    val uid = authRepository.getCurrentUserId()
-                        ?: throw Exception("You must be signed in to claim an item")
-                    val user = getUserUseCase(uid).getOrThrow()
+                val uid = authRepository.getCurrentUserId()
+                    ?: throw Exception("You must be signed in to claim an item")
+                val user = getUserUseCase(uid).getOrThrow()
 
                     val result = createClaimUseCase(
                         itemId = itemId,
